@@ -151,7 +151,7 @@ dialog.view::backdrop{background:rgba(15,20,17,.6)}
 .talk .eyebrow{color:var(--honey)}
 .talk h2{color:var(--on-dark)}
 .talk-in{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:clamp(24px,5vw,64px);align-items:center}
-@media(max-width:780px){.talk-in{grid-template-columns:1fr;gap:16px}.stage{max-width:150px;margin-inline:auto}.ing-pop{width:64px;height:64px;right:-40px}.ing-pop svg{width:42px;height:42px}}
+@media(max-width:780px){.talk-in{grid-template-columns:1fr;gap:8px}.stage{max-width:120px;margin-inline:auto}.talk .eyebrow{font-size:.68rem}.ing-pop{width:64px;height:64px;right:-40px}.ing-pop svg{width:42px;height:42px}}
 .stage{position:relative}
 .gb{width:100%;height:auto;overflow:visible}
 .gb .arm{transform-origin:116px 98px;transform-box:view-box;animation:wave 2.4s ease-in-out infinite}
@@ -169,16 +169,16 @@ dialog.view::backdrop{background:rgba(15,20,17,.6)}
 .ing-pop{position:absolute;right:-6px;top:4px;width:86px;height:86px;border-radius:50%;background:var(--bg);display:grid;place-items:center;box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transform:scale(.4);transition:opacity .25s,transform .35s cubic-bezier(.3,1.6,.5,1)}
 .ing-pop.show{opacity:1;transform:scale(1)}
 .ing-pop svg{width:58px;height:58px}
-.stories{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.stories{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
 .stories button{font:500 .92rem var(--f-body);color:var(--on-dark);background:transparent;border:1px solid rgba(251,247,240,.35);border-radius:999px;padding:9px 15px;cursor:pointer;min-height:40px}
 .stories button[aria-selected="true"]{background:var(--on-dark);color:var(--spruce);border-color:var(--on-dark);font-weight:700}
-.speech{font-family:var(--f-hand);font-size:clamp(1.6rem,3.2vw,2.2rem);line-height:1.25;min-height:5.2em;margin:18px 0 22px;color:var(--on-dark)}
+.speech{font-family:var(--f-hand);font-size:clamp(1.6rem,3.2vw,2.2rem);line-height:1.25;min-height:5.2em;margin:18px 0 8px;color:var(--on-dark)}
 .speech .caret{display:inline-block;width:.06em;height:.9em;background:var(--honey);margin-left:2px;vertical-align:-.1em;animation:caret 1s steps(2) infinite}
 @keyframes caret{50%{opacity:0}}
 .player{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .player .btn-line{color:var(--on-dark)}
 .player .sm{padding:12px 16px}
-.sound-state{font-size:.86rem;margin-top:12px;min-height:1.3em;color:var(--honey);font-variant-numeric:tabular-nums}
+.sound-state{font-size:.86rem;margin-top:10px;min-height:1.3em;color:var(--honey);font-variant-numeric:tabular-nums}
 .audio-help{margin-top:14px;padding:14px 16px;border-radius:6px;background:rgba(251,247,240,.1);border:1px solid var(--honey)}
 .audio-help p{margin-bottom:10px}
 .talk .small{font-size:.86rem;opacity:.78;margin-top:14px;max-width:56ch}
@@ -377,17 +377,16 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
     <p class="eyebrow">Для тех, кто навёл камеру на QR с коробки</p>
     <h2 id="talkTitle">Пряник расскажет свою историю</h2>
     <div class="stories" role="tablist" aria-label="Истории пряника" id="stories"></div>
-    <p class="speech" id="say" aria-live="polite"></p>
     <div class="player">
       <button class="btn btn-primary" type="button" id="playBtn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span>Слушать</span></button>
       <button class="btn btn-line sm" type="button" id="stopBtn" disabled>■ Стоп</button>
       <button class="btn btn-line sm" type="button" id="againBtn">↻ Сначала</button>
-      <button class="btn btn-line sm" type="button" id="soundBtn" aria-pressed="true">Звук: вкл</button>
     </div>
-    <audio id="voice" preload="auto" playsinline></audio>
     <p class="sound-state" id="soundState" aria-live="off"></p>
+    <p class="speech" id="say" aria-live="polite"></p>
+    <audio id="voice" preload="auto" playsinline></audio>
     <div class="audio-help" id="audioHelp" role="alert" hidden><p id="audioHelpText"></p><div class="player"><button class="btn btn-primary sm" type="button" id="retryBtn">↻ Повторить</button><a class="btn btn-line sm" id="openMp3" href="audio/s1-1.mp3" target="_blank" rel="noopener">Открыть запись отдельно</a></div></div>
-    <p class="small" id="voiceNote">Звук включается только по кнопке — прибавьте громкость и выключите беззвучный режим. Рот открывается в такт громкости записи; это анимация, а не точная артикуляция.</p>
+    <p class="small" id="voiceNote">Звук включается только по кнопке — прибавьте громкость и выключите беззвучный режим. Рот открывается в такт громкости записи; это анимация, а не точная артикуляция. <span id="playerVer" style="opacity:.6"></span></p>
     <div class="ingr" id="ingr" role="group" aria-label="Из чего сделан пряник"></div>
     <div class="recipe" id="recipe"></div>
   </div>
@@ -568,103 +567,123 @@ var CONFIG = {
     {k:'dough',n:'Пряничное тесто',say:'Из мёда, пряностей и муки Танюшка замешивает тесто. Потом из него вырезают меня и моих друзей.',ic:'<svg viewBox="0 0 40 40"><ellipse cx="20" cy="24" rx="15" ry="10" fill="#d4995a" stroke="#8c5a24" stroke-width="2"/><ellipse cx="16" cy="21" rx="5" ry="2.5" fill="#e8b97e"/></svg>'},
     {k:'glaze',n:'Глазурь',say:'Глазурью Танюшка рисует на мне узоры, оленей и надписи — слой за слоем, с просушкой.',ic:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="14" fill="#c98543"/><path d="M10 18 l4-4 4 4 4-4 4 4 4-4 M10 24 q10 6 20 0" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>'}
   ];
-  var say=$('say'),stage=$('stage'),note=$('voiceNote');
+  /* ===================== ПЛЕЕР ПРЯНИКА v3 =====================
+     Правила: следующая фраза запускается ТОЛЬКО по событию «ended» предыдущей записи.
+     Таймеры не переключают фразы: сторож лишь замечает зависание и останавливает историю с кнопкой «Повторить».
+     Состояния: idle · loading («Загрузка») · speaking («Говорит») · paused («Пауза») · error («Ошибка») · done («Завершено»). */
+  var PLAYER_VERSION='3';
+  var say=$('say'),stage=$('stage');
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var soundOn=true,current=0,run=0,typeT=null,safety=null;
-  /* --- 1) основной звук: готовые MP3 через один переиспользуемый <audio> (Android «разблокирует» его по нажатию) --- */
   var player=$('voice')||new Audio();player.preload='auto';
-  var stateEl=$('soundState'),help=$('audioHelp'),lastKey='s1-1',lastErr='';
-  function fmtT(t){t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60}
-  player.addEventListener('timeupdate',function(){if(!player.paused&&player.currentTime>0)stateEl.textContent='🔊 Звук идёт · '+fmtT(player.currentTime)+' / '+fmtT(player.duration)});
-  function showHelp(msg){help.hidden=false;$('audioHelpText').textContent=msg;$('openMp3').href=audioUrl(lastKey);stateEl.textContent=''}
-  function hideHelp(){help.hidden=true}
-  var raf=0,fakeT=null,ENV=null,curKey='';
-  function audioUrl(key){return 'audio/'+key+'.mp3?v=2'}
-  /* громкость каждой записи посчитана заранее (audio/env.json, 25 значений в секунду: 0 — рот закрыт, 1 — приоткрыт, 2 — открыт) */
-  try{fetch('audio/env.json?v=2').then(function(r){return r.ok?r.json():null}).then(function(j){ENV=j}).catch(function(){})}catch(e){}
-  function mouthLoop(){cancelAnimationFrame(raf);clearInterval(fakeT);
-    var env=ENV&&ENV.frames&&ENV.frames[curKey];
-    if(!env||reduce){fakeMouth();return}
-    var fps=ENV.fps||25;
-    var tick=function(){var i=Math.floor(player.currentTime*fps);stage.dataset.mouth=env.charAt(i)||'0';raf=requestAnimationFrame(tick)};tick()}
-  function fakeMouth(){clearInterval(fakeT);if(reduce){stage.dataset.mouth='1';return}var seq=[1,2,1,0,2,1,0],i=0;fakeT=setInterval(function(){stage.dataset.mouth=String(seq[i++%seq.length])},120)}
-  function mouthStart(){stage.classList.add('speaking')}
-  function mouthStop(){cancelAnimationFrame(raf);clearInterval(fakeT);fakeT=null;stage.dataset.mouth='0';stage.classList.remove('speaking')}
-  player.addEventListener('playing',function(){mouthStart();mouthLoop()});
-  player.addEventListener('pause',function(){cancelAnimationFrame(raf);clearInterval(fakeT);stage.dataset.mouth='0'});
+  var stateEl=$('soundState'),help=$('audioHelp'),playBtn=$('playBtn'),stopBtn=$('stopBtn');
+  var current=0,state='idle',sess=null,token=0,typeT=null,raf=0,watchT=null,ENV=null;
+  var DEBUG=/[?&]debug/.test(location.search),logEl=null;
+  if(DEBUG){logEl=document.createElement('pre');logEl.style.cssText='font:11px/1.35 monospace;white-space:pre-wrap;max-height:220px;overflow:auto;background:rgba(0,0,0,.35);padding:8px;margin-top:12px;border-radius:4px';help.parentNode.insertBefore(logEl,help.nextSibling)}
+  var t0=Date.now();function log(m){if(!DEBUG)return;logEl.textContent+=((Date.now()-t0)/1000).toFixed(2)+'s '+m+'\n';logEl.scrollTop=1e9}
+  function audioUrl(key){return 'audio/'+key+'.mp3?v=3'}
+  try{fetch('audio/env.json?v=3').then(function(r){return r.ok?r.json():null}).then(function(j){ENV=j}).catch(function(){})}catch(e){}
+  function fmtT(t){if(!isFinite(t))return'…';t=Math.max(0,Math.floor(t));return Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60}
 
-  /* --- 2) резерв: синтез речи телефона (если MP3 не загрузился) --- */
-  var synth=('speechSynthesis' in window)?window.speechSynthesis:null,voices=[];
-  function loadVoices(){try{voices=synth.getVoices()||[]}catch(e){voices=[]}}
-  if(synth){loadVoices();try{synth.addEventListener('voiceschanged',loadVoices)}catch(e){}}
-  function ruVoice(){var r=voices.filter(function(v){return /^ru(-|_|$)/i.test(v.lang)});return r.filter(function(v){return v.localService})[0]||r[0]||null}
+  /* --- состояние и кнопки --- */
+  var LABEL={idle:'Слушать',loading:'Пауза',speaking:'Пауза',paused:'Продолжить',error:'Повторить',done:'Ещё раз'};
+  function setState(st,msg){state=st;log('state → '+st+(msg?' ('+msg+')':''));
+    playBtn.querySelector('span').textContent=LABEL[st];playBtn.dataset.state=st;
+    stopBtn.disabled=!(st==='loading'||st==='speaking'||st==='paused');
+    var ph=sess&&sess.lines.length>1?' · фраза '+(sess.idx+1)+' из '+sess.lines.length:'';
+    stateEl.textContent=st==='loading'?'⏳ Загрузка'+ph:st==='speaking'?'🔊 Говорит'+ph:st==='paused'?'⏸ Пауза'+ph:st==='error'?'⚠ Ошибка'+ph:st==='done'?'✓ Завершено':'';
+    if(st!=='speaking')mouthOff();else mouthOn();
+    help.hidden=st!=='error';if(st==='error'){$('audioHelpText').textContent=msg||'Запись не воспроизвелась.';$('openMp3').href=audioUrl(sess.lines[sess.idx].key)}
+  }
 
-  function typeText(text){clearInterval(typeT);
+  /* --- рот: только пока запись действительно играет --- */
+  function mouthOn(){cancelAnimationFrame(raf);stage.classList.add('speaking');
+    var tick=function(){
+      if(state!=='speaking'||player.paused||player.ended){stage.dataset.mouth='0';return}
+      var env=ENV&&ENV.frames&&sess&&ENV.frames[sess.lines[sess.idx].key];
+      if(reduce)stage.dataset.mouth='1';
+      else if(env){stage.dataset.mouth=env.charAt(Math.floor(player.currentTime*(ENV.fps||25)))||'0'}
+      else{stage.dataset.mouth=String([1,2,1,0][Math.floor(player.currentTime*8)%4])}
+      raf=requestAnimationFrame(tick)};
+    tick()}
+  function mouthOff(){cancelAnimationFrame(raf);stage.dataset.mouth='0';stage.classList.remove('speaking')}
+
+  /* --- текст: печать только визуальная, на воспроизведение не влияет; фраза остаётся до конца записи --- */
+  function showText(text){clearInterval(typeT);
     if(reduce){say.textContent=text;return}
     var i=0;say.innerHTML='';var span=document.createElement('span');var caret=document.createElement('span');caret.className='caret';say.appendChild(span);say.appendChild(caret);
-    typeT=setInterval(function(){i+=2;span.textContent=text.slice(0,i);if(i>=text.length)clearInterval(typeT)},28)}
-  function textTime(t){return Math.max(2400,t.length*60)}
+    typeT=setInterval(function(){i+=2;span.textContent=text.slice(0,i);if(i>=text.length){clearInterval(typeT);caret.remove()}},28)}
 
-  /* Проговорить одну фразу: MP3 → синтез речи → текст. done() вызывается ровно один раз, когда фраза закончилась. */
-  function speakLine(key,text,my,done){
-    var finished=false;function fin(){if(finished||my!==run)return;finished=true;clearTimeout(safety);player.onended=player.onerror=null;mouthStop();done()}
-    typeText(text);
-    if(!soundOn){fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text));return}
-    player.onended=fin;
-    player.onerror=function(){player.onended=player.onerror=null;lastErr='файл не загрузился (код '+(player.error&&player.error.code)+')';viaSynth()};
-    curKey=key;lastKey=key;
-    var progressed=false;var onProg=function(){if(player.currentTime>0.05){progressed=true;player.removeEventListener('timeupdate',onProg)}};player.addEventListener('timeupdate',onProg);
-    try{player.muted=false;player.volume=1;player.src=audioUrl(key);
-      var pr=player.play();
-      if(pr&&pr.catch)pr.catch(function(err){if(my!==run)return;player.onended=player.onerror=null;lastErr=(err&&err.name)||'ошибка';
-        stopAll();showHelp(err&&err.name==='NotAllowedError'?'Браузер заблокировал звук. Нажмите «Повторить» — это разрешит воспроизведение.':'Звук не запустился ('+lastErr+'). Нажмите «Повторить» или откройте запись отдельно.')});
-    }catch(e){viaSynth()}
-    /* сторож: если за 5 секунд запись так и не пошла — честно сообщаем, а не молчим */
-    setTimeout(function(){if(my!==run||finished||progressed||!player.src)return;if(player.paused||player.currentTime<0.05){stopAll();showHelp('Звук не пошёл. Проверьте громкость мультимедиа (кнопка громкости во время воспроизведения) и нажмите «Повторить». Если не поможет — откройте запись отдельно.')}},5000);
-    /* страховка только от «зависания»: длина файла + запас, а не фиксированные 2,5 с */
-    player.onloadedmetadata=function(){if(my!==run)return;clearTimeout(safety);var d=isFinite(player.duration)?player.duration:12;safety=setTimeout(fin,(d+4)*1000)};
-    safety=setTimeout(fin,30000);
-    function viaSynth(){if(my!==run||finished)return;clearTimeout(safety);
-      if(!synth||!soundOn){note.textContent='Звук не загрузился — пряник рассказывает текстом.';fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text));return}
-      try{var u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.pitch=1.25;var v=ruVoice();if(v)u.voice=v;
-        u.onstart=function(){fakeMouth();mouthStart()};u.onend=fin;
-        u.onerror=function(ev){if(ev&&(ev.error==='interrupted'||ev.error==='canceled'))return;note.textContent='Голос недоступен — пряник рассказывает текстом.';fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text))};
-        synth.cancel();synth.speak(u);safety=setTimeout(fin,text.length*180+8000)}catch(e){fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text))}}
+  /* --- события <audio>: один набор обработчиков, каждый сверяется с номером сеанса --- */
+  function mine(){return sess&&sess.token===token&&player.dataset.key===sess.lines[sess.idx].key}
+  player.addEventListener('playing',function(){log('playing '+player.dataset.key+' dur='+player.duration);if(!mine())return;setState('speaking')});
+  player.addEventListener('waiting',function(){log('waiting');if(!mine()||state==='paused')return;setState('loading','буферизация')});
+  player.addEventListener('pause',function(){log('pause ended='+player.ended);if(!mine()||player.ended||sess.userPause)return;if(state==='speaking'&&player.currentTime>0){sess.userPause=true;setState('paused','системная пауза')}});
+  player.addEventListener('timeupdate',function(){if(!mine())return;sess.lastT=player.currentTime;sess.lastMove=Date.now();
+    if(state==='speaking')stateEl.textContent='🔊 Говорит'+(sess.lines.length>1?' · фраза '+(sess.idx+1)+' из '+sess.lines.length:'')+' · '+fmtT(player.currentTime)+' / '+fmtT(player.duration)});
+  player.addEventListener('ended',function(){log('ended '+player.dataset.key+' t='+player.currentTime.toFixed(2));if(!mine())return;mouthOff();
+    if(sess.idx+1<sess.lines.length){var my=token;sess.idx++;setTimeout(function(){if(my===token)playPhrase()},300)}  /* пауза 0,3 с ПОСЛЕ окончания записи */
+    else finish()});
+  player.addEventListener('error',function(){var c=player.error&&player.error.code;log('error code='+c);if(!mine())return;
+    setState('error','Запись не загрузилась (код '+c+'). Проверьте интернет и нажмите «Повторить».')});
+
+  /* --- сторож: только обнаруживает зависание, фразы не переключает --- */
+  function watch(){clearInterval(watchT);watchT=setInterval(function(){if(!sess||sess.token!==token){clearInterval(watchT);return}
+    if(state!=='loading'&&state!=='speaking')return;
+    var idle=Date.now()-(sess.lastMove||sess.started);
+    if(idle>12000){log('watchdog: нет движения '+idle+'мс');try{player.pause()}catch(e){}
+      setState('error',state==='loading'?'Запись слишком долго загружается. Проверьте интернет и нажмите «Повторить».':'Звук остановился. Нажмите «Повторить» — продолжим с этой фразы.')}},1000)}
+
+  function playPhrase(){if(!sess||sess.token!==token)return;
+    var ln=sess.lines[sess.idx];sess.started=Date.now();sess.lastMove=0;
+    showText(ln.text);setState('loading');
+    player.dataset.key=ln.key;player.muted=false;player.volume=1;player.src=audioUrl(ln.key);
+    log('src '+ln.key);
+    var my=token,pr;
+    try{pr=player.play()}catch(e){pr=null;setState('error','Браузер не смог запустить звук ('+e.name+'). Нажмите «Повторить».')}
+    if(pr&&pr.catch)pr.catch(function(err){log('play() rejected '+(err&&err.name));if(my!==token||!mine())return;
+      if(err&&err.name==='AbortError')return;
+      setState('error',err&&err.name==='NotAllowedError'?'Браузер не разрешил звук без нажатия. Нажмите «Повторить».':'Звук не запустился ('+(err&&err.name)+'). Нажмите «Повторить».')});
+    watch();
   }
   function prefetch(keys){keys.forEach(function(k){try{fetch(audioUrl(k)).catch(function(){})}catch(e){}})}
+  function cancel(){token++;clearInterval(watchT);clearInterval(typeT);if(sess)sess.token=-1;
+    try{player.pause()}catch(e){}player.removeAttribute('src');player.dataset.key='';try{player.load()}catch(e){}mouthOff()}
+  function start(lines,kind,fromIdx){cancel();
+    sess={token:token,kind:kind,lines:lines,idx:fromIdx||0,userPause:false};
+    prefetch(lines.slice(sess.idx,sess.idx+2).map(function(l){return l.key}));
+    log('start '+kind+' x'+lines.length);playPhrase()}
+  function finish(){clearInterval(watchT);setState('done');
+    if(sess.kind==='story')say.textContent=STORIES[current].s.join(' ')}
+  function storyLines(i){return STORIES[i].s.map(function(t,n){return{key:'s'+(i+1)+'-'+(n+1),text:t}})}
+  function playStory(){start(storyLines(current),'story',0)}
+  function stopAll(){cancel();sess=null;setState('idle');say.textContent=STORIES[current].s.join(' ')}
+
+  playBtn.onclick=function(){
+    if(state==='speaking'||state==='loading'){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','пауза пользователем');return}
+    if(state==='paused'&&sess){sess.userPause=false;sess.lastMove=Date.now();var pr=player.play();if(pr&&pr.catch)pr.catch(function(e){setState('error','Не удалось продолжить ('+e.name+'). Нажмите «Повторить».')});setState('loading');watch();return}
+    if(state==='error'&&sess){var k=sess.kind,l=sess.lines,i=sess.idx;start(l,k,i);return}   /* повтор той же фразы, без пропуска */
+    playStory()};
+  stopBtn.onclick=function(){stopAll()};
+  $('againBtn').onclick=function(){playStory()};
+  $('retryBtn').onclick=function(){if(sess){start(sess.lines,sess.kind,sess.idx)}else playStory()};
 
   function setStory(i){current=i;[].forEach.call($('stories').children,function(b,j){b.setAttribute('aria-selected',String(j===i));b.tabIndex=j===i?0:-1});
-    stop();say.textContent=STORIES[i].s.join(' ')}
+    cancel();sess=null;setState('idle');say.textContent=STORIES[i].s.join(' ')}
   STORIES.forEach(function(st,i){var b=document.createElement('button');b.type='button';b.setAttribute('role','tab');b.textContent=(i+1)+'. '+st.t;
-    b.onclick=function(){setStory(i);play()};
+    b.onclick=function(){setStory(i);playStory()};
     b.onkeydown=function(e){var n=null;if(e.key==='ArrowRight')n=(i+1)%STORIES.length;if(e.key==='ArrowLeft')n=(i+STORIES.length-1)%STORIES.length;if(n!==null){e.preventDefault();setStory(n);$('stories').children[n].focus()}};
     $('stories').appendChild(b)});
+  document.addEventListener('visibilitychange',function(){if(document.hidden&&(state==='speaking'||state==='loading')){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','страница скрыта')}});
+  window.addEventListener('pagehide',function(){cancel()});
 
-  function stopAll(){run++;clearTimeout(safety);clearInterval(typeT);try{player.pause()}catch(e){}mouthStop();$('playBtn').querySelector('span').textContent='Слушать';$('stopBtn').disabled=true;say.textContent=STORIES[current].s.join(' ')}
-  function stop(){hideHelp();stateEl.textContent='';run++;clearTimeout(safety);clearInterval(typeT);player.onended=player.onerror=null;try{player.pause()}catch(e){}try{synth&&synth.cancel()}catch(e){}mouthStop();
-    $('playBtn').querySelector('span').textContent='Слушать';$('stopBtn').disabled=true}
-  function play(){stop();var my=++run;$('stopBtn').disabled=false;$('playBtn').querySelector('span').textContent='Играет…';
-    var lines=STORIES[current].s;prefetch(lines.map(function(_,n){return 's'+(current+1)+'-'+(n+1)}));
-    (function line(n){if(my!==run)return;
-      if(n>=lines.length){mouthStop();stateEl.textContent='';$('stopBtn').disabled=true;$('playBtn').querySelector('span').textContent='Ещё раз';say.textContent=lines.join(' ');return}
-      speakLine('s'+(current+1)+'-'+(n+1),lines[n],my,function(){setTimeout(function(){line(n+1)},250)})})(0);
-  }
-  $('playBtn').onclick=function(){play()};
-  $('retryBtn').onclick=function(){play()};
-  $('stopBtn').onclick=function(){stop();say.textContent=STORIES[current].s.join(' ')};
-  $('againBtn').onclick=function(){play()};
-  $('soundBtn').onclick=function(){soundOn=!soundOn;this.setAttribute('aria-pressed',String(soundOn));this.textContent='Звук: '+(soundOn?'вкл':'выкл');if(!soundOn){try{player.pause();synth&&synth.cancel()}catch(e){}}};
-  document.addEventListener('visibilitychange',function(){if(document.hidden)stop()});
-  window.addEventListener('pagehide',stop);
-
-  /* ингредиенты */
+  /* ингредиенты: та же логика, одна фраза */
   var pop=$('ingPop'),popT;
   ING.forEach(function(g){var b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','false');b.innerHTML=g.ic+'<span>'+g.n+'</span>';
     b.onclick=function(){[].forEach.call($('ingr').children,function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');
-      stop();pop.innerHTML=g.ic;pop.classList.remove('show');void pop.offsetWidth;pop.classList.add('show');clearTimeout(popT);popT=setTimeout(function(){pop.classList.remove('show')},4200);
-      var my=++run;$('stopBtn').disabled=false;speakLine('ing-'+g.k,g.say,my,function(){$('stopBtn').disabled=true});
-    };
+      pop.innerHTML=g.ic;pop.classList.remove('show');void pop.offsetWidth;pop.classList.add('show');clearTimeout(popT);popT=setTimeout(function(){pop.classList.remove('show')},4200);
+      start([{key:'ing-'+g.k,text:g.say}],'ing',0)};
     $('ingr').appendChild(b)});
+  $('playerVer').textContent='плеер v'+PLAYER_VERSION;
   var R=CONFIG.RECIPE||{};function rv(v){return v?'<span>'+v.replace(/</g,'&lt;')+'</span>':'<span class="tbd">уточняется у Татьяны</span>'}
   $('recipe').innerHTML='<div><b>Точный состав:</b> '+rv(R.composition)+'</div><div><b>Аллергены:</b> '+rv(R.allergens)+'</div><div><b>Хранение:</b> '+rv(R.storage)+'</div>';
   setStory(0);
@@ -747,11 +766,11 @@ var CONFIG = {
   if(CONFIG.MAX_URL)dk('MAX',CONFIG.MAX_URL);else if(CONFIG.WHATSAPP)dk('WhatsApp',wa);
   if(CONFIG.VK_URL)dk('ВК',CONFIG.VK_URL);
   try{var seen=new Set();var io=new IntersectionObserver(function(es){es.forEach(function(x){x.isIntersecting?seen.add(x.target):seen.delete(x.target)});dock.classList.toggle('away',seen.size>0)},{threshold:.05});
-    io.observe($('zakaz'));io.observe($('kontakty'));io.observe(document.querySelector('.hero .cta'))}catch(e){}
+    io.observe($('zakaz'));io.observe($('kontakty'));io.observe($('privet'));io.observe(document.querySelector('.hero .cta'))}catch(e){}
 
   /* ---------- переход с QR на #privet ---------- */
   function goPrivet(){if(location.hash==='#privet'){var t=$('privet');setTimeout(function(){t.scrollIntoView({behavior:'auto'});$('playBtn').focus({preventScroll:true})},50)}}
-  goPrivet();window.addEventListener('hashchange',goPrivet);
+  goPrivet();window.addEventListener('hashchange',goPrivet);window.addEventListener('load',function(){if(location.hash==='#privet'&&window.scrollY<$('privet').offsetTop-200)goPrivet()});
 })();
 </script>
 </body>
