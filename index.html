@@ -381,7 +381,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
       <button class="btn btn-line sm" type="button" id="againBtn">↻ Сначала</button>
       <button class="btn btn-line sm" type="button" id="soundBtn" aria-pressed="true">Звук: вкл</button>
     </div>
-    <p class="small" id="voiceNote">Звук включается только по кнопке. Рот двигается, пока пряник говорит, — это анимация, а не точная артикуляция. Если на телефоне нет русского голоса, история показывается текстом.</p>
+    <p class="small" id="voiceNote">Звук включается только по кнопке — прибавьте громкость и выключите беззвучный режим. Рот открывается в такт громкости записи; это анимация, а не точная артикуляция.</p>
     <div class="ingr" id="ingr" role="group" aria-label="Из чего сделан пряник"></div>
     <div class="recipe" id="recipe"></div>
   </div>
@@ -563,75 +563,91 @@ var CONFIG = {
     {k:'glaze',n:'Глазурь',say:'Глазурью Танюшка рисует на мне узоры, оленей и надписи — слой за слоем, с просушкой.',ic:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="14" fill="#c98543"/><path d="M10 18 l4-4 4 4 4-4 4 4 4-4 M10 24 q10 6 20 0" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>'}
   ];
   var say=$('say'),stage=$('stage'),note=$('voiceNote');
-  var synth=('speechSynthesis' in window)?window.speechSynthesis:null;
-  var voices=[],soundOn=true,current=0,run=0,timer=null,mouthT=null,typeT=null,playing=false;
-  function loadVoices(){try{voices=synth.getVoices()||[]}catch(e){voices=[]}}
-  if(synth){loadVoices();try{synth.addEventListener('voiceschanged',loadVoices)}catch(e){try{synth.onvoiceschanged=loadVoices}catch(x){}}}
-  function ruVoice(){var r=voices.filter(function(v){return /^ru(-|_|$)/i.test(v.lang)});return r.filter(function(v){return v.localService})[0]||r[0]||null}
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var soundOn=true,current=0,run=0,typeT=null,safety=null;
+  /* --- 1) основной звук: готовые MP3 через один переиспользуемый <audio> (Android «разблокирует» его по нажатию) --- */
+  var player=new Audio();player.preload='auto';player.setAttribute('playsinline','');
+  var raf=0,fakeT=null,ENV=null,curKey='';
+  function audioUrl(key){return 'audio/'+key+'.mp3?v=2'}
+  /* громкость каждой записи посчитана заранее (audio/env.json, 25 значений в секунду: 0 — рот закрыт, 1 — приоткрыт, 2 — открыт) */
+  try{fetch('audio/env.json?v=2').then(function(r){return r.ok?r.json():null}).then(function(j){ENV=j}).catch(function(){})}catch(e){}
+  function mouthLoop(){cancelAnimationFrame(raf);clearInterval(fakeT);
+    var env=ENV&&ENV.frames&&ENV.frames[curKey];
+    if(!env||reduce){fakeMouth();return}
+    var fps=ENV.fps||25;
+    var tick=function(){var i=Math.floor(player.currentTime*fps);stage.dataset.mouth=env.charAt(i)||'0';raf=requestAnimationFrame(tick)};tick()}
+  function fakeMouth(){clearInterval(fakeT);if(reduce){stage.dataset.mouth='1';return}var seq=[1,2,1,0,2,1,0],i=0;fakeT=setInterval(function(){stage.dataset.mouth=String(seq[i++%seq.length])},120)}
+  function mouthStart(){stage.classList.add('speaking')}
+  function mouthStop(){cancelAnimationFrame(raf);clearInterval(fakeT);fakeT=null;stage.dataset.mouth='0';stage.classList.remove('speaking')}
+  player.addEventListener('playing',function(){mouthStart();mouthLoop()});
+  player.addEventListener('pause',function(){cancelAnimationFrame(raf);clearInterval(fakeT);stage.dataset.mouth='0'});
 
-  /* рот: двигается, пока идёт речь; на границах слов — «щелчок», если браузер их сообщает */
-  function mouthStart(){clearInterval(mouthT);stage.classList.add('speaking');if(reduce){stage.dataset.mouth='1';return}
-    var seq=[1,2,1,0,2,1,0];var i=0;mouthT=setInterval(function(){stage.dataset.mouth=String(seq[i++%seq.length])},120)}
-  function mouthStop(){clearInterval(mouthT);mouthT=null;stage.dataset.mouth='0';stage.classList.remove('speaking')}
+  /* --- 2) резерв: синтез речи телефона (если MP3 не загрузился) --- */
+  var synth=('speechSynthesis' in window)?window.speechSynthesis:null,voices=[];
+  function loadVoices(){try{voices=synth.getVoices()||[]}catch(e){voices=[]}}
+  if(synth){loadVoices();try{synth.addEventListener('voiceschanged',loadVoices)}catch(e){}}
+  function ruVoice(){var r=voices.filter(function(v){return /^ru(-|_|$)/i.test(v.lang)});return r.filter(function(v){return v.localService})[0]||r[0]||null}
 
-  function typeText(text,done){clearInterval(typeT);
-    if(reduce){say.textContent=text;done&&done();return}
+  function typeText(text){clearInterval(typeT);
+    if(reduce){say.textContent=text;return}
     var i=0;say.innerHTML='';var span=document.createElement('span');var caret=document.createElement('span');caret.className='caret';say.appendChild(span);say.appendChild(caret);
-    typeT=setInterval(function(){i+=2;span.textContent=text.slice(0,i);if(i>=text.length){clearInterval(typeT);done&&done()}},28)}
+    typeT=setInterval(function(){i+=2;span.textContent=text.slice(0,i);if(i>=text.length)clearInterval(typeT)},28)}
+  function textTime(t){return Math.max(2400,t.length*60)}
+
+  /* Проговорить одну фразу: MP3 → синтез речи → текст. done() вызывается ровно один раз, когда фраза закончилась. */
+  function speakLine(key,text,my,done){
+    var finished=false;function fin(){if(finished||my!==run)return;finished=true;clearTimeout(safety);player.onended=player.onerror=null;mouthStop();done()}
+    typeText(text);
+    if(!soundOn){fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text));return}
+    player.onended=fin;
+    player.onerror=function(){player.onended=player.onerror=null;viaSynth()};
+    curKey=key;
+    try{player.src=audioUrl(key);player.currentTime=0;
+      var pr=player.play();
+      if(pr&&pr.catch)pr.catch(function(err){if(my!==run)return;player.onended=player.onerror=null;
+        if(err&&err.name==='NotAllowedError'){note.textContent='Браузер не дал включить звук. Нажмите «Слушать» ещё раз.';}
+        viaSynth()});
+    }catch(e){viaSynth()}
+    /* страховка только от «зависания»: длина файла + запас, а не фиксированные 2,5 с */
+    player.onloadedmetadata=function(){if(my!==run)return;clearTimeout(safety);var d=isFinite(player.duration)?player.duration:12;safety=setTimeout(fin,(d+4)*1000)};
+    safety=setTimeout(fin,30000);
+    function viaSynth(){if(my!==run||finished)return;clearTimeout(safety);
+      if(!synth||!soundOn){note.textContent='Звук не загрузился — пряник рассказывает текстом.';fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text));return}
+      try{var u=new SpeechSynthesisUtterance(text);u.lang='ru-RU';u.pitch=1.25;var v=ruVoice();if(v)u.voice=v;
+        u.onstart=function(){fakeMouth();mouthStart()};u.onend=fin;
+        u.onerror=function(ev){if(ev&&(ev.error==='interrupted'||ev.error==='canceled'))return;note.textContent='Голос недоступен — пряник рассказывает текстом.';fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text))};
+        synth.cancel();synth.speak(u);safety=setTimeout(fin,text.length*180+8000)}catch(e){fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text))}}
+  }
+  function prefetch(keys){keys.forEach(function(k){try{fetch(audioUrl(k)).catch(function(){})}catch(e){}})}
 
   function setStory(i){current=i;[].forEach.call($('stories').children,function(b,j){b.setAttribute('aria-selected',String(j===i));b.tabIndex=j===i?0:-1});
     stop();say.textContent=STORIES[i].s.join(' ')}
-  STORIES.forEach(function(st,i){var b=document.createElement('button');b.type='button';b.role='tab';b.setAttribute('role','tab');b.textContent=(i+1)+'. '+st.t;
+  STORIES.forEach(function(st,i){var b=document.createElement('button');b.type='button';b.setAttribute('role','tab');b.textContent=(i+1)+'. '+st.t;
     b.onclick=function(){setStory(i);play()};
     b.onkeydown=function(e){var n=null;if(e.key==='ArrowRight')n=(i+1)%STORIES.length;if(e.key==='ArrowLeft')n=(i+STORIES.length-1)%STORIES.length;if(n!==null){e.preventDefault();setStory(n);$('stories').children[n].focus()}};
     $('stories').appendChild(b)});
 
-  function stop(){run++;playing=false;clearTimeout(timer);clearInterval(typeT);try{synth&&synth.cancel()}catch(e){}mouthStop();
+  function stop(){run++;clearTimeout(safety);clearInterval(typeT);player.onended=player.onerror=null;try{player.pause()}catch(e){}try{synth&&synth.cancel()}catch(e){}mouthStop();
     $('playBtn').querySelector('span').textContent='Слушать';$('stopBtn').disabled=true}
-  function play(){stop();var my=++run;playing=true;$('stopBtn').disabled=false;$('playBtn').querySelector('span').textContent='Играет…';
-    var lines=STORIES[current].s;var voiceOK=soundOn&&!!synth;
-    function line(n){
-      if(my!==run)return;
-      if(n>=lines.length){mouthStop();playing=false;$('stopBtn').disabled=true;$('playBtn').querySelector('span').textContent='Ещё раз';say.textContent=lines.join(' ');return}
-      var text=lines.join(' ').slice(0,0);typeText(lines[n]);mouthStart();
-      var advanced=false;function next(){if(advanced||my!==run)return;advanced=true;clearTimeout(timer);mouthStop();timer=setTimeout(function(){line(n+1)},260)}
-      if(voiceOK){
-        try{
-          var u=new SpeechSynthesisUtterance(lines[n]);u.lang='ru-RU';u.rate=1;u.pitch=1.3;var v=ruVoice();if(v)u.voice=v;
-          var started=false;
-          u.onstart=function(){started=true};
-          u.onboundary=function(){if(!reduce){stage.dataset.mouth='2';setTimeout(function(){if(mouthT)stage.dataset.mouth='1'},90)}};
-          u.onend=next;
-          u.onerror=function(ev){if(ev&&ev.error==='interrupted'||ev&&ev.error==='canceled')return;voiceOK=false;note.textContent='Голос на этом устройстве недоступен — пряник рассказывает текстом.';timer=setTimeout(next,textTime(lines[n]))};
-          synth.speak(u);
-          /* Android иногда молчит без ошибки: если речь не началась — переходим в текстовый режим */
-          setTimeout(function(){if(my===run&&!started&&!advanced){voiceOK=false;try{synth.cancel()}catch(e){}note.textContent='Русский голос не найден — пряник рассказывает текстом. На Android голос можно добавить в настройках: «Синтез речи».';timer=setTimeout(next,textTime(lines[n]))}},2500);
-          timer=setTimeout(next,Math.max(6000,lines[n].length*130)); /* страховка, если onend не придёт */
-          return;
-        }catch(e){voiceOK=false}
-      }
-      timer=setTimeout(next,textTime(lines[n]));
-    }
-    line(0);
+  function play(){stop();var my=++run;$('stopBtn').disabled=false;$('playBtn').querySelector('span').textContent='Играет…';
+    var lines=STORIES[current].s;prefetch(lines.map(function(_,n){return 's'+(current+1)+'-'+(n+1)}));
+    (function line(n){if(my!==run)return;
+      if(n>=lines.length){mouthStop();$('stopBtn').disabled=true;$('playBtn').querySelector('span').textContent='Ещё раз';say.textContent=lines.join(' ');return}
+      speakLine('s'+(current+1)+'-'+(n+1),lines[n],my,function(){setTimeout(function(){line(n+1)},250)})})(0);
   }
-  function textTime(t){return Math.max(2400,t.length*60)}
   $('playBtn').onclick=function(){play()};
   $('stopBtn').onclick=function(){stop();say.textContent=STORIES[current].s.join(' ')};
   $('againBtn').onclick=function(){play()};
-  $('soundBtn').onclick=function(){soundOn=!soundOn;this.setAttribute('aria-pressed',String(soundOn));this.textContent='Звук: '+(soundOn?'вкл':'выкл');if(!soundOn){try{synth&&synth.cancel()}catch(e){}}};
-  if(!synth){note.textContent='Этот браузер не умеет озвучивать текст — пряник рассказывает историю текстом.'}
+  $('soundBtn').onclick=function(){soundOn=!soundOn;this.setAttribute('aria-pressed',String(soundOn));this.textContent='Звук: '+(soundOn?'вкл':'выкл');if(!soundOn){try{player.pause();synth&&synth.cancel()}catch(e){}}};
   document.addEventListener('visibilitychange',function(){if(document.hidden)stop()});
   window.addEventListener('pagehide',stop);
 
   /* ингредиенты */
   var pop=$('ingPop'),popT;
-  ING.forEach(function(g,i){var b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','false');b.innerHTML=g.ic+'<span>'+g.n+'</span>';
+  ING.forEach(function(g){var b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','false');b.innerHTML=g.ic+'<span>'+g.n+'</span>';
     b.onclick=function(){[].forEach.call($('ingr').children,function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');
       stop();pop.innerHTML=g.ic;pop.classList.remove('show');void pop.offsetWidth;pop.classList.add('show');clearTimeout(popT);popT=setTimeout(function(){pop.classList.remove('show')},4200);
-      var my=++run;typeText(g.say);mouthStart();
-      if(soundOn&&synth){try{var u=new SpeechSynthesisUtterance(g.say);u.lang='ru-RU';u.pitch=1.3;var v=ruVoice();if(v)u.voice=v;u.onend=function(){if(my===run)mouthStop()};u.onerror=function(){if(my===run)mouthStop()};synth.speak(u);timer=setTimeout(function(){if(my===run)mouthStop()},Math.max(5000,g.say.length*120));return}catch(e){}}
-      timer=setTimeout(function(){if(my===run)mouthStop()},textTime(g.say));
+      var my=++run;$('stopBtn').disabled=false;speakLine('ing-'+g.k,g.say,my,function(){$('stopBtn').disabled=true});
     };
     $('ingr').appendChild(b)});
   var R=CONFIG.RECIPE||{};function rv(v){return v?'<span>'+v.replace(/</g,'&lt;')+'</span>':'<span class="tbd">уточняется у Татьяны</span>'}
