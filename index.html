@@ -567,121 +567,119 @@ var CONFIG = {
     {k:'dough',n:'Пряничное тесто',say:'Из мёда, пряностей и муки Танюшка замешивает тесто. Потом из него вырезают меня и моих друзей.',ic:'<svg viewBox="0 0 40 40"><ellipse cx="20" cy="24" rx="15" ry="10" fill="#d4995a" stroke="#8c5a24" stroke-width="2"/><ellipse cx="16" cy="21" rx="5" ry="2.5" fill="#e8b97e"/></svg>'},
     {k:'glaze',n:'Глазурь',say:'Глазурью Танюшка рисует на мне узоры, оленей и надписи — слой за слоем, с просушкой.',ic:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="14" fill="#c98543"/><path d="M10 18 l4-4 4 4 4-4 4 4 4-4 M10 24 q10 6 20 0" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>'}
   ];
-  /* ===================== ПЛЕЕР ПРЯНИКА v3 =====================
-     Правила: следующая фраза запускается ТОЛЬКО по событию «ended» предыдущей записи.
-     Таймеры не переключают фразы: сторож лишь замечает зависание и останавливает историю с кнопкой «Повторить».
+  /* ===================== ПЛЕЕР ПРЯНИКА v4 =====================
+     Каждая история — ОДИН MP3 (audio/storyN.mp3), запускается одним нажатием: страница больше не включает
+     новые файлы без участия человека (на Android это и обрывало звук).
+     Текст фразы выбирается по текущей секунде записи (STARTS) — он не может уйти вперёд звука.
+     Конец истории — только событие «ended». Таймеры ничего не переключают; сторож лишь замечает зависание.
      Состояния: idle · loading («Загрузка») · speaking («Говорит») · paused («Пауза») · error («Ошибка») · done («Завершено»). */
-  var PLAYER_VERSION='3';
+  var PLAYER_VERSION='4';
+  var STARTS={"story1": [0, 4.99, 11.348], "story2": [0, 4.03, 9.788, 15.186], "story3": [0, 4.342, 10.988], "story4": [0, 3.862, 10.292]};   /* начало каждой фразы внутри записи истории, секунды */
   var say=$('say'),stage=$('stage');
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
   var player=$('voice')||new Audio();player.preload='auto';
   var stateEl=$('soundState'),help=$('audioHelp'),playBtn=$('playBtn'),stopBtn=$('stopBtn');
   var current=0,state='idle',sess=null,token=0,typeT=null,raf=0,watchT=null,ENV=null;
   var DEBUG=/[?&]debug/.test(location.search),logEl=null;
-  if(DEBUG){logEl=document.createElement('pre');logEl.style.cssText='font:11px/1.35 monospace;white-space:pre-wrap;max-height:220px;overflow:auto;background:rgba(0,0,0,.35);padding:8px;margin-top:12px;border-radius:4px';help.parentNode.insertBefore(logEl,help.nextSibling)}
+  if(DEBUG){logEl=document.createElement('pre');logEl.style.cssText='font:11px/1.35 monospace;white-space:pre-wrap;max-height:240px;overflow:auto;background:rgba(0,0,0,.35);padding:8px;margin-top:12px;border-radius:4px';help.parentNode.insertBefore(logEl,help.nextSibling)}
   var t0=Date.now();function log(m){if(!DEBUG)return;logEl.textContent+=((Date.now()-t0)/1000).toFixed(2)+'s '+m+'\n';logEl.scrollTop=1e9}
-  function audioUrl(key){return 'audio/'+key+'.mp3?v=3'}
-  try{fetch('audio/env.json?v=3').then(function(r){return r.ok?r.json():null}).then(function(j){ENV=j}).catch(function(){})}catch(e){}
+  function audioUrl(key){return 'audio/'+key+'.mp3?v=4'}
+  try{fetch('audio/env.json?v=4').then(function(r){return r.ok?r.json():null}).then(function(j){ENV=j}).catch(function(){})}catch(e){}
   function fmtT(t){if(!isFinite(t))return'…';t=Math.max(0,Math.floor(t));return Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60}
 
-  /* --- состояние и кнопки --- */
   var LABEL={idle:'Слушать',loading:'Пауза',speaking:'Пауза',paused:'Продолжить',error:'Повторить',done:'Ещё раз'};
-  function setState(st,msg){state=st;log('state → '+st+(msg?' ('+msg+')':''));
+  function phraseInfo(){return sess&&sess.lines.length>1?' · фраза '+(sess.idx+1)+' из '+sess.lines.length:''}
+  function setState(st,msg){state=st;log('state → '+st+(msg?' ('+msg+')':'')+' t='+(player.currentTime||0).toFixed(2));
     playBtn.querySelector('span').textContent=LABEL[st];playBtn.dataset.state=st;
     stopBtn.disabled=!(st==='loading'||st==='speaking'||st==='paused');
-    var ph=sess&&sess.lines.length>1?' · фраза '+(sess.idx+1)+' из '+sess.lines.length:'';
-    stateEl.textContent=st==='loading'?'⏳ Загрузка'+ph:st==='speaking'?'🔊 Говорит'+ph:st==='paused'?'⏸ Пауза'+ph:st==='error'?'⚠ Ошибка'+ph:st==='done'?'✓ Завершено':'';
-    if(st!=='speaking')mouthOff();else mouthOn();
-    help.hidden=st!=='error';if(st==='error'){$('audioHelpText').textContent=msg||'Запись не воспроизвелась.';$('openMp3').href=audioUrl(sess.lines[sess.idx].key)}
+    stateEl.textContent=st==='loading'?'⏳ Загрузка'+phraseInfo():st==='speaking'?'🔊 Говорит'+phraseInfo():st==='paused'?'⏸ Пауза'+phraseInfo():st==='error'?'⚠ Ошибка'+phraseInfo():st==='done'?'✓ Завершено':'';
+    if(st==='speaking')mouthOn();else mouthOff();
+    help.hidden=st!=='error';if(st==='error'){$('audioHelpText').textContent=msg||'Запись не воспроизвелась.';$('openMp3').href=audioUrl(sess.key)}
   }
 
-  /* --- рот: только пока запись действительно играет --- */
+  /* фраза по текущей секунде записи */
+  function syncPhrase(){if(!sess)return;var t=player.currentTime,i=0;
+    for(var k=0;k<sess.lines.length;k++){if(t+0.05>=sess.lines[k].start)i=k}
+    if(i!==sess.idx||!sess.shown){sess.idx=i;sess.shown=true;showText(sess.lines[i].text);log('фраза '+(i+1)+' на '+t.toFixed(2)+'с')}
+  }
   function mouthOn(){cancelAnimationFrame(raf);stage.classList.add('speaking');
     var tick=function(){
       if(state!=='speaking'||player.paused||player.ended){stage.dataset.mouth='0';return}
-      var env=ENV&&ENV.frames&&sess&&ENV.frames[sess.lines[sess.idx].key];
+      syncPhrase();
+      var env=ENV&&ENV.frames&&ENV.frames[sess.key];
       if(reduce)stage.dataset.mouth='1';
-      else if(env){stage.dataset.mouth=env.charAt(Math.floor(player.currentTime*(ENV.fps||25)))||'0'}
-      else{stage.dataset.mouth=String([1,2,1,0][Math.floor(player.currentTime*8)%4])}
+      else if(env)stage.dataset.mouth=env.charAt(Math.floor(player.currentTime*(ENV.fps||25)))||'0';
+      else stage.dataset.mouth=String([1,2,1,0][Math.floor(player.currentTime*8)%4]);
       raf=requestAnimationFrame(tick)};
     tick()}
   function mouthOff(){cancelAnimationFrame(raf);stage.dataset.mouth='0';stage.classList.remove('speaking')}
-
-  /* --- текст: печать только визуальная, на воспроизведение не влияет; фраза остаётся до конца записи --- */
   function showText(text){clearInterval(typeT);
     if(reduce){say.textContent=text;return}
     var i=0;say.innerHTML='';var span=document.createElement('span');var caret=document.createElement('span');caret.className='caret';say.appendChild(span);say.appendChild(caret);
     typeT=setInterval(function(){i+=2;span.textContent=text.slice(0,i);if(i>=text.length){clearInterval(typeT);caret.remove()}},28)}
 
-  /* --- события <audio>: один набор обработчиков, каждый сверяется с номером сеанса --- */
-  function mine(){return sess&&sess.token===token&&player.dataset.key===sess.lines[sess.idx].key}
-  player.addEventListener('playing',function(){log('playing '+player.dataset.key+' dur='+player.duration);if(!mine())return;setState('speaking')});
+  function mine(){return sess&&sess.token===token&&player.dataset.key===sess.key}
+  player.addEventListener('loadedmetadata',function(){log('metadata dur='+player.duration);if(!mine())return;
+    if(sess.seekTo>0){try{player.currentTime=sess.seekTo}catch(e){}sess.seekTo=0}});
+  player.addEventListener('playing',function(){log('playing t='+player.currentTime.toFixed(2));if(!mine())return;sess.lastMove=Date.now();setState('speaking')});
   player.addEventListener('waiting',function(){log('waiting');if(!mine()||state==='paused')return;setState('loading','буферизация')});
-  player.addEventListener('pause',function(){log('pause ended='+player.ended);if(!mine()||player.ended||sess.userPause)return;if(state==='speaking'&&player.currentTime>0){sess.userPause=true;setState('paused','системная пауза')}});
-  player.addEventListener('timeupdate',function(){if(!mine())return;sess.lastT=player.currentTime;sess.lastMove=Date.now();
-    if(state==='speaking')stateEl.textContent='🔊 Говорит'+(sess.lines.length>1?' · фраза '+(sess.idx+1)+' из '+sess.lines.length:'')+' · '+fmtT(player.currentTime)+' / '+fmtT(player.duration)});
-  player.addEventListener('ended',function(){log('ended '+player.dataset.key+' t='+player.currentTime.toFixed(2));if(!mine())return;mouthOff();
-    if(sess.idx+1<sess.lines.length){var my=token;sess.idx++;setTimeout(function(){if(my===token)playPhrase()},300)}  /* пауза 0,3 с ПОСЛЕ окончания записи */
-    else finish()});
+  player.addEventListener('stalled',function(){log('stalled')});
+  player.addEventListener('pause',function(){log('pause ended='+player.ended);if(!mine()||player.ended||sess.userPause)return;
+    if(state==='speaking'){sess.userPause=true;setState('paused','звук приостановлен системой')}});
+  player.addEventListener('timeupdate',function(){if(!mine())return;
+    if(player.currentTime!==sess.lastT){sess.lastT=player.currentTime;sess.lastMove=Date.now()}
+    if(state==='speaking'){syncPhrase();stateEl.textContent='🔊 Говорит'+phraseInfo()+' · '+fmtT(player.currentTime)+' / '+fmtT(player.duration)}});
+  player.addEventListener('ended',function(){log('ended t='+player.currentTime.toFixed(2));if(!mine())return;finish()});
   player.addEventListener('error',function(){var c=player.error&&player.error.code;log('error code='+c);if(!mine())return;
     setState('error','Запись не загрузилась (код '+c+'). Проверьте интернет и нажмите «Повторить».')});
 
-  /* --- сторож: только обнаруживает зависание, фразы не переключает --- */
   function watch(){clearInterval(watchT);watchT=setInterval(function(){if(!sess||sess.token!==token){clearInterval(watchT);return}
     if(state!=='loading'&&state!=='speaking')return;
     var idle=Date.now()-(sess.lastMove||sess.started);
-    if(idle>12000){log('watchdog: нет движения '+idle+'мс');try{player.pause()}catch(e){}
+    if(idle>12000){log('сторож: нет движения '+idle+'мс');try{player.pause()}catch(e){}sess.userPause=true;
       setState('error',state==='loading'?'Запись слишком долго загружается. Проверьте интернет и нажмите «Повторить».':'Звук остановился. Нажмите «Повторить» — продолжим с этой фразы.')}},1000)}
 
-  function playPhrase(){if(!sess||sess.token!==token)return;
-    var ln=sess.lines[sess.idx];sess.started=Date.now();sess.lastMove=0;
-    showText(ln.text);setState('loading');
-    player.dataset.key=ln.key;player.muted=false;player.volume=1;player.src=audioUrl(ln.key);
-    log('src '+ln.key);
+  function cancel(){token++;clearInterval(watchT);clearInterval(typeT);if(sess)sess.token=-1;
+    try{player.pause()}catch(e){}player.dataset.key='';player.removeAttribute('src');try{player.load()}catch(e){}mouthOff()}
+  /* запуск: вызывается только из нажатия пользователя */
+  function start(key,lines,kind,fromIdx){cancel();
+    sess={token:token,key:key,kind:kind,lines:lines,idx:fromIdx||0,shown:false,userPause:false,started:Date.now(),lastMove:0,seekTo:fromIdx?lines[fromIdx].start:0};
+    showText(lines[sess.idx].text);sess.shown=true;setState('loading');
+    player.dataset.key=key;player.muted=false;player.volume=1;player.src=audioUrl(key);log('src '+key+' с фразы '+(sess.idx+1));
     var my=token,pr;
     try{pr=player.play()}catch(e){pr=null;setState('error','Браузер не смог запустить звук ('+e.name+'). Нажмите «Повторить».')}
-    if(pr&&pr.catch)pr.catch(function(err){log('play() rejected '+(err&&err.name));if(my!==token||!mine())return;
-      if(err&&err.name==='AbortError')return;
-      setState('error',err&&err.name==='NotAllowedError'?'Браузер не разрешил звук без нажатия. Нажмите «Повторить».':'Звук не запустился ('+(err&&err.name)+'). Нажмите «Повторить».')});
-    watch();
-  }
-  function prefetch(keys){keys.forEach(function(k){try{fetch(audioUrl(k)).catch(function(){})}catch(e){}})}
-  function cancel(){token++;clearInterval(watchT);clearInterval(typeT);if(sess)sess.token=-1;
-    try{player.pause()}catch(e){}player.removeAttribute('src');player.dataset.key='';try{player.load()}catch(e){}mouthOff()}
-  function start(lines,kind,fromIdx){cancel();
-    sess={token:token,kind:kind,lines:lines,idx:fromIdx||0,userPause:false};
-    prefetch(lines.slice(sess.idx,sess.idx+2).map(function(l){return l.key}));
-    log('start '+kind+' x'+lines.length);playPhrase()}
-  function finish(){clearInterval(watchT);setState('done');
+    if(pr&&pr.catch)pr.catch(function(err){log('play() отклонён: '+(err&&err.name));if(my!==token||!mine()||(err&&err.name==='AbortError'))return;
+      setState('error',err&&err.name==='NotAllowedError'?'Браузер не разрешил звук. Нажмите «Повторить».':'Звук не запустился ('+(err&&err.name)+'). Нажмите «Повторить».')});
+    watch()}
+  function finish(){clearInterval(watchT);sess.idx=sess.lines.length-1;setState('done');
     if(sess.kind==='story')say.textContent=STORIES[current].s.join(' ')}
-  function storyLines(i){return STORIES[i].s.map(function(t,n){return{key:'s'+(i+1)+'-'+(n+1),text:t}})}
-  function playStory(){start(storyLines(current),'story',0)}
+  function storyLines(i){var st=STARTS['story'+(i+1)];return STORIES[i].s.map(function(t,n){return{text:t,start:st[n]}})}
+  function playStory(fromIdx){start('story'+(current+1),storyLines(current),'story',fromIdx||0)}
   function stopAll(){cancel();sess=null;setState('idle');say.textContent=STORIES[current].s.join(' ')}
 
   playBtn.onclick=function(){
-    if(state==='speaking'||state==='loading'){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','пауза пользователем');return}
+    if(state==='speaking'||state==='loading'){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','пауза');return}
     if(state==='paused'&&sess){sess.userPause=false;sess.lastMove=Date.now();var pr=player.play();if(pr&&pr.catch)pr.catch(function(e){setState('error','Не удалось продолжить ('+e.name+'). Нажмите «Повторить».')});setState('loading');watch();return}
-    if(state==='error'&&sess){var k=sess.kind,l=sess.lines,i=sess.idx;start(l,k,i);return}   /* повтор той же фразы, без пропуска */
-    playStory()};
+    if(state==='error'&&sess){start(sess.key,sess.lines,sess.kind,sess.idx);return}
+    playStory(0)};
   stopBtn.onclick=function(){stopAll()};
-  $('againBtn').onclick=function(){playStory()};
-  $('retryBtn').onclick=function(){if(sess){start(sess.lines,sess.kind,sess.idx)}else playStory()};
+  $('againBtn').onclick=function(){playStory(0)};
+  $('retryBtn').onclick=function(){if(sess)start(sess.key,sess.lines,sess.kind,sess.idx);else playStory(0)};
 
   function setStory(i){current=i;[].forEach.call($('stories').children,function(b,j){b.setAttribute('aria-selected',String(j===i));b.tabIndex=j===i?0:-1});
     cancel();sess=null;setState('idle');say.textContent=STORIES[i].s.join(' ')}
   STORIES.forEach(function(st,i){var b=document.createElement('button');b.type='button';b.setAttribute('role','tab');b.textContent=(i+1)+'. '+st.t;
-    b.onclick=function(){setStory(i);playStory()};
+    b.onclick=function(){setStory(i);playStory(0)};
     b.onkeydown=function(e){var n=null;if(e.key==='ArrowRight')n=(i+1)%STORIES.length;if(e.key==='ArrowLeft')n=(i+STORIES.length-1)%STORIES.length;if(n!==null){e.preventDefault();setStory(n);$('stories').children[n].focus()}};
     $('stories').appendChild(b)});
-  document.addEventListener('visibilitychange',function(){if(document.hidden&&(state==='speaking'||state==='loading')){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','страница скрыта')}});
+  document.addEventListener('visibilitychange',function(){log('visibility '+document.visibilityState);if(document.hidden&&(state==='speaking'||state==='loading')){sess.userPause=true;try{player.pause()}catch(e){}setState('paused','страница скрыта')}});
   window.addEventListener('pagehide',function(){cancel()});
 
-  /* ингредиенты: та же логика, одна фраза */
   var pop=$('ingPop'),popT;
   ING.forEach(function(g){var b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','false');b.innerHTML=g.ic+'<span>'+g.n+'</span>';
     b.onclick=function(){[].forEach.call($('ingr').children,function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');
       pop.innerHTML=g.ic;pop.classList.remove('show');void pop.offsetWidth;pop.classList.add('show');clearTimeout(popT);popT=setTimeout(function(){pop.classList.remove('show')},4200);
-      start([{key:'ing-'+g.k,text:g.say}],'ing',0)};
+      start('ing-'+g.k,[{text:g.say,start:0}],'ing',0)};
     $('ingr').appendChild(b)});
   $('playerVer').textContent='плеер v'+PLAYER_VERSION;
   var R=CONFIG.RECIPE||{};function rv(v){return v?'<span>'+v.replace(/</g,'&lt;')+'</span>':'<span class="tbd">уточняется у Татьяны</span>'}
