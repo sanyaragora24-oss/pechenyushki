@@ -178,6 +178,9 @@ dialog.view::backdrop{background:rgba(15,20,17,.6)}
 .player{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .player .btn-line{color:var(--on-dark)}
 .player .sm{padding:12px 16px}
+.sound-state{font-size:.86rem;margin-top:12px;min-height:1.3em;color:var(--honey);font-variant-numeric:tabular-nums}
+.audio-help{margin-top:14px;padding:14px 16px;border-radius:6px;background:rgba(251,247,240,.1);border:1px solid var(--honey)}
+.audio-help p{margin-bottom:10px}
 .talk .small{font-size:.86rem;opacity:.78;margin-top:14px;max-width:56ch}
 .ingr{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px}
 .ingr button{display:inline-flex;align-items:center;gap:8px;font:500 .93rem var(--f-body);color:var(--on-dark);background:rgba(251,247,240,.06);border:1px solid rgba(251,247,240,.28);border-radius:999px;padding:8px 14px 8px 8px;cursor:pointer;min-height:44px}
@@ -381,6 +384,9 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
       <button class="btn btn-line sm" type="button" id="againBtn">↻ Сначала</button>
       <button class="btn btn-line sm" type="button" id="soundBtn" aria-pressed="true">Звук: вкл</button>
     </div>
+    <audio id="voice" preload="auto" playsinline></audio>
+    <p class="sound-state" id="soundState" aria-live="off"></p>
+    <div class="audio-help" id="audioHelp" role="alert" hidden><p id="audioHelpText"></p><div class="player"><button class="btn btn-primary sm" type="button" id="retryBtn">↻ Повторить</button><a class="btn btn-line sm" id="openMp3" href="audio/s1-1.mp3" target="_blank" rel="noopener">Открыть запись отдельно</a></div></div>
     <p class="small" id="voiceNote">Звук включается только по кнопке — прибавьте громкость и выключите беззвучный режим. Рот открывается в такт громкости записи; это анимация, а не точная артикуляция.</p>
     <div class="ingr" id="ingr" role="group" aria-label="Из чего сделан пряник"></div>
     <div class="recipe" id="recipe"></div>
@@ -566,7 +572,12 @@ var CONFIG = {
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
   var soundOn=true,current=0,run=0,typeT=null,safety=null;
   /* --- 1) основной звук: готовые MP3 через один переиспользуемый <audio> (Android «разблокирует» его по нажатию) --- */
-  var player=new Audio();player.preload='auto';player.setAttribute('playsinline','');
+  var player=$('voice')||new Audio();player.preload='auto';
+  var stateEl=$('soundState'),help=$('audioHelp'),lastKey='s1-1',lastErr='';
+  function fmtT(t){t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60}
+  player.addEventListener('timeupdate',function(){if(!player.paused&&player.currentTime>0)stateEl.textContent='🔊 Звук идёт · '+fmtT(player.currentTime)+' / '+fmtT(player.duration)});
+  function showHelp(msg){help.hidden=false;$('audioHelpText').textContent=msg;$('openMp3').href=audioUrl(lastKey);stateEl.textContent=''}
+  function hideHelp(){help.hidden=true}
   var raf=0,fakeT=null,ENV=null,curKey='';
   function audioUrl(key){return 'audio/'+key+'.mp3?v=2'}
   /* громкость каждой записи посчитана заранее (audio/env.json, 25 значений в секунду: 0 — рот закрыт, 1 — приоткрыт, 2 — открыт) */
@@ -600,14 +611,16 @@ var CONFIG = {
     typeText(text);
     if(!soundOn){fakeMouth();mouthStart();safety=setTimeout(fin,textTime(text));return}
     player.onended=fin;
-    player.onerror=function(){player.onended=player.onerror=null;viaSynth()};
-    curKey=key;
-    try{player.src=audioUrl(key);player.currentTime=0;
+    player.onerror=function(){player.onended=player.onerror=null;lastErr='файл не загрузился (код '+(player.error&&player.error.code)+')';viaSynth()};
+    curKey=key;lastKey=key;
+    var progressed=false;var onProg=function(){if(player.currentTime>0.05){progressed=true;player.removeEventListener('timeupdate',onProg)}};player.addEventListener('timeupdate',onProg);
+    try{player.muted=false;player.volume=1;player.src=audioUrl(key);
       var pr=player.play();
-      if(pr&&pr.catch)pr.catch(function(err){if(my!==run)return;player.onended=player.onerror=null;
-        if(err&&err.name==='NotAllowedError'){note.textContent='Браузер не дал включить звук. Нажмите «Слушать» ещё раз.';}
-        viaSynth()});
+      if(pr&&pr.catch)pr.catch(function(err){if(my!==run)return;player.onended=player.onerror=null;lastErr=(err&&err.name)||'ошибка';
+        stopAll();showHelp(err&&err.name==='NotAllowedError'?'Браузер заблокировал звук. Нажмите «Повторить» — это разрешит воспроизведение.':'Звук не запустился ('+lastErr+'). Нажмите «Повторить» или откройте запись отдельно.')});
     }catch(e){viaSynth()}
+    /* сторож: если за 5 секунд запись так и не пошла — честно сообщаем, а не молчим */
+    setTimeout(function(){if(my!==run||finished||progressed||!player.src)return;if(player.paused||player.currentTime<0.05){stopAll();showHelp('Звук не пошёл. Проверьте громкость мультимедиа (кнопка громкости во время воспроизведения) и нажмите «Повторить». Если не поможет — откройте запись отдельно.')}},5000);
     /* страховка только от «зависания»: длина файла + запас, а не фиксированные 2,5 с */
     player.onloadedmetadata=function(){if(my!==run)return;clearTimeout(safety);var d=isFinite(player.duration)?player.duration:12;safety=setTimeout(fin,(d+4)*1000)};
     safety=setTimeout(fin,30000);
@@ -627,15 +640,17 @@ var CONFIG = {
     b.onkeydown=function(e){var n=null;if(e.key==='ArrowRight')n=(i+1)%STORIES.length;if(e.key==='ArrowLeft')n=(i+STORIES.length-1)%STORIES.length;if(n!==null){e.preventDefault();setStory(n);$('stories').children[n].focus()}};
     $('stories').appendChild(b)});
 
-  function stop(){run++;clearTimeout(safety);clearInterval(typeT);player.onended=player.onerror=null;try{player.pause()}catch(e){}try{synth&&synth.cancel()}catch(e){}mouthStop();
+  function stopAll(){run++;clearTimeout(safety);clearInterval(typeT);try{player.pause()}catch(e){}mouthStop();$('playBtn').querySelector('span').textContent='Слушать';$('stopBtn').disabled=true;say.textContent=STORIES[current].s.join(' ')}
+  function stop(){hideHelp();stateEl.textContent='';run++;clearTimeout(safety);clearInterval(typeT);player.onended=player.onerror=null;try{player.pause()}catch(e){}try{synth&&synth.cancel()}catch(e){}mouthStop();
     $('playBtn').querySelector('span').textContent='Слушать';$('stopBtn').disabled=true}
   function play(){stop();var my=++run;$('stopBtn').disabled=false;$('playBtn').querySelector('span').textContent='Играет…';
     var lines=STORIES[current].s;prefetch(lines.map(function(_,n){return 's'+(current+1)+'-'+(n+1)}));
     (function line(n){if(my!==run)return;
-      if(n>=lines.length){mouthStop();$('stopBtn').disabled=true;$('playBtn').querySelector('span').textContent='Ещё раз';say.textContent=lines.join(' ');return}
+      if(n>=lines.length){mouthStop();stateEl.textContent='';$('stopBtn').disabled=true;$('playBtn').querySelector('span').textContent='Ещё раз';say.textContent=lines.join(' ');return}
       speakLine('s'+(current+1)+'-'+(n+1),lines[n],my,function(){setTimeout(function(){line(n+1)},250)})})(0);
   }
   $('playBtn').onclick=function(){play()};
+  $('retryBtn').onclick=function(){play()};
   $('stopBtn').onclick=function(){stop();say.textContent=STORIES[current].s.join(' ')};
   $('againBtn').onclick=function(){play()};
   $('soundBtn').onclick=function(){soundOn=!soundOn;this.setAttribute('aria-pressed',String(soundOn));this.textContent='Звук: '+(soundOn?'вкл':'выкл');if(!soundOn){try{player.pause();synth&&synth.cancel()}catch(e){}}};
